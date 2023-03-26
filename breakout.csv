@@ -1,0 +1,37 @@
+year,education_level,category,fees
+2022-23,Undergraduate,Activity,267
+2022-23,Undergraduate,Facilities,319
+2022-23,Undergraduate,Athletic,279
+2022-23,Undergraduate,Health Service,410
+2022-23,Undergraduate,Computing,442
+2022-23,Undergraduate,General Student Service,253
+2022-23,Graduate,Activity,282
+2022-23,Graduate,Facilities,319
+2022-23,Graduate,Athletic,279
+2022-23,Graduate,Health Service,410
+2022-23,Graduate,Computing,442
+2022-23,Graduate,General Student Service,243
+2021-22,Undergraduate,Activity,267
+2021-22,Undergraduate,Facilities,358
+2021-22,Undergraduate,Athletic,279
+2021-22,Undergraduate,Health Service,410
+2021-22,Undergraduate,Computing,442
+2021-22,Undergraduate,General Student Service,253
+2021-22,Graduate,Activity,282
+2021-22,Graduate,Facilities,358
+2021-22,Graduate,Athletic,279
+2021-22,Graduate,Health Service,410
+2021-22,Graduate,Computing,442
+2021-22,Graduate,General Student Service,243
+2020-21,Undergraduate,Activity,237
+2020-21,Undergraduate,Facilities,358
+2020-21,Undergraduate,Athletic,279
+2020-21,Undergraduate,Health Service,400
+2020-21,Undergraduate,Computing,442
+2020-21,Undergraduate,General Student Service,251
+2020-21,Graduate,Activity,250
+2020-21,Graduate,Facilities,358
+2020-21,Graduate,Athletic,279
+2020-21,Graduate,Health Service,400
+2020-21,Graduate,Computing,442
+2020-21,Graduate,General Student Service,241

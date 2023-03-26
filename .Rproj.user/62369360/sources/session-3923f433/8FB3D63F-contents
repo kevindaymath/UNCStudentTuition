@@ -1,0 +1,333 @@
+options(warn = -1)
+
+# Packages
+library(shiny)
+library(shinydashboard)
+library(shinyjs)
+library(DT)
+library(tidyverse)
+library(leaflet)
+library(ECharts2Shiny)
+
+# ____________________________________________________________________________________
+# Read in data/assets, create variables
+
+tables <- readRDS("data/cleaned.rds")
+shp_states <- readRDS("data/shp_states.rds")
+states <- unique(tables$`Table 1`$points$State)
+table_choices <- c("Demographics", "Poverty", "Employment")
+map_df <- readRDS("data/map_df.rds")
+variable_choices <- names(map_df)[-c(1,2)]
+info <- paste(readLines("data/Info.txt"), collapse = "\n")
+pie_categories <- list("Sex" = variable_choices[2:3],
+                       "Age" = variable_choices[4:9],
+                       "War Era" = variable_choices[10:15],
+                       "Insurance" = variable_choices[16:17],
+                       "Disability" = variable_choices[18:19],
+                       "County Ruralness" = variable_choices[20:22],
+                       "Poverty" = variable_choices[24:25],
+                       "Employment" = variable_choices[27:29])
+
+# ____________________________________________________________________________________
+# Helper functions
+
+transpose <- function(state, table) {
+  table %>% 
+    filter(State == state) %>%
+    select(-State) %>% 
+    column_to_rownames("Residence") %>%
+    t() %>%
+    as.data.frame()
+}
+
+max_min_var <- function(variable) {
+  min_rural <- min(map_df %>% filter(Residence == "Rural") %>% select(variable), na.rm = TRUE)
+  min_urban <- min(map_df %>% filter(Residence == "Urban") %>% select(variable), na.rm = TRUE)
+  max_rural <- max(map_df %>% filter(Residence == "Rural") %>% select(variable), na.rm = TRUE)
+  max_urban <- max(map_df %>% filter(Residence == "Urban") %>% select(variable), na.rm = TRUE)
+  c(min(min_rural,min_urban)-0.1,max(max_rural,max_urban)+0.1)
+}
+
+mapping <- function(residence, bool_count_var, min, max, chosen_variable) {
+  fill_shp <- shp_states
+  if (residence == "Rural") 
+    subset(shp_states,NAME != "District of Columbia")
+  
+  fill_shp@data <- fill_shp@data %>% 
+    left_join(.,map_df, by = c("NAME"="State")) %>%
+    filter(Residence == residence)
+  
+  if(bool_count_var) { # Raw Totals
+    bins <- quantile(fill_shp@data[,chosen_variable],probs = seq(0, 1, 0.20))
+    labels <- sprintf("<strong>%s</strong><br>%g veterans<br/> ", 
+                      fill_shp$NAME,fill_shp@data[,chosen_variable]) %>% lapply(htmltools::HTML)    
+  } 
+  else { # Percent variables
+    if(max == min) {
+      quint <- 1/5
+    } else {
+      quint <- (max-min)/5
+    }
+    bins <- c(min, min+quint, min+2*quint,min+3*quint,min+4*quint,min+5*quint)
+    labels <- sprintf("<strong>%s</strong><br>%g%% of veterans<br/> ", 
+                      fill_shp$NAME,fill_shp@data[,chosen_variable]) %>% lapply(htmltools::HTML)    
+  }
+  
+  
+  pal <- colorBin("YlOrRd", domain = fill_shp@data[,chosen_variable], bins = bins)
+  
+  leaflet() %>%
+    setView(-96, 38, 4) %>% # setView(-118, 45, 2.5) %>%
+    # addPolygons(data = fill_shp, fillColor = ~pal(fill_shp@data[,chosen_variable()]), label = labels) %>% 
+    addProviderTiles("Esri.WorldGrayCanvas") %>% 
+    
+    addPolygons(data = fill_shp, fillColor = ~pal(fill_shp@data[,chosen_variable]), weight = 2, opacity = 1, 
+                color = "white", dashArray = "3", fillOpacity = 0.7, 
+                highlight = highlightOptions(weight = 5, color = "#666", dashArray = "", 
+                                             fillOpacity = 0.7,bringToFront = TRUE),
+                label = labels, labelOptions = labelOptions(style = list("font-weight" = "normal", padding = "3px 8px"),
+                                                            textsize = "15px", direction = "auto")) %>% 
+    addLegend(pal = pal, values = bins, opacity = 0.7, title = NULL, position = "bottomright")
+  
+}
+
+# ____________________________________________________________________________________
+
+ui <- fluidPage(
+  useShinyjs(),
+  loadEChartsLibrary(),
+  dashboardPage( 
+    dashboardHeader(
+      title = "Kevin Day - STA 323",
+      titleWidth = 250
+    ),
+    dashboardSidebar(
+      sidebarMenu(
+        menuItem("Information", tabName = "information"),
+        menuItem("Raw Data", tabName = "raw_data"),
+        menuItem("Maps", tabName = "maps"),
+        menuItem("Pie Charts", tabName = "pies")
+      )
+    ),
+    
+    dashboardBody(
+      tabItems(
+        # First tab content
+        tabItem(tabName = "information",
+                htmlOutput("info")
+        ),
+        
+        # Second tab content
+        tabItem(tabName = "raw_data",
+                fluidRow(
+                  column(4,selectInput("select_table",label="Choose a table",
+                                       choices=table_choices, selected="Demographics")),
+                  column(4,selectInput("select_state",label="Choose a state",
+                                       choices=states, selected="Entire US"))
+                ),
+                htmlOutput("table_title"),
+                dataTableOutput("raw_table")
+        ) ,
+        
+        # Third tab content
+        tabItem(tabName = "maps",
+                fluidRow(
+                  column(4,selectInput("select_variable",label="Choose a variable",
+                                       choices=variable_choices, selected="Raw Total (Demographics)")),
+                  column(8,sliderInput("range",label="Range of Interest(%):",min=0,max=100,step = 0.1,width="100%",value=c(0,100)))
+                ),
+                htmlOutput("rural_title"),
+                leafletOutput("rural_map"),
+                htmlOutput("urban_title"),
+                leafletOutput("urban_map")
+        ),
+        tabItem(tabName = "pies",
+                fluidRow(
+                  column(4,selectInput("select_category",label="Choose a category",
+                                       choices=names(pie_categories), selected="Sex")),
+                  column(4,selectInput("select_state2",label="Choose a state",
+                                       choices=states[states != "District of Columbia"], selected="Entire US"))
+                ),
+                htmlOutput("rural_title2"),
+                tags$div(id="rural_pie", style="width:100%;height:400px;"),
+                deliverChart(div_id = "rural_pie"),
+                htmlOutput("urban_title2"),
+                tags$div(id="urban_pie", style="width:100%;height:400px;"),
+                deliverChart(div_id = "urban_pie")
+        )
+      ),
+      tags$head(tags$style(HTML('
+                                /* logo */
+                                .skin-blue .main-header .logo {
+                                background-color: #472f91;
+                                font-family: "Georgia", Times, "Times New Roman", serif;
+                                font-weight: bold;
+                                font-size: 20px;
+                                }
+
+                                /* logo when hovered */
+                                .skin-blue .main-header .logo:hover {
+                                background-color: #472f91;
+                                }
+
+                                /* navbar (rest of the header) */
+                                .skin-blue .main-header .navbar {
+                                background-color: #472f91;
+                                }
+
+                                /* main sidebar */
+                                .skin-blue .main-sidebar {
+                                background-color: #7f65cd;
+                                }
+
+                                /* body */
+                                .content-wrapper, .right-side {
+                                background-color: #e5f1d5;
+                                }
+                                
+                                .header_text { 
+                                font-size: 20px;
+                                line-height: 50px;
+                                text-align: left;
+                                font-family: "Georgia", Times, "Times New Roman", serif;
+                                padding: 0 10px;
+                                color: white;
+                                '))),
+      tags$script(HTML('
+      $(document).ready(function() {
+        $("header").find("nav").append(\'<span class="header_text">Explorer on 2011–2015 ACS Data on Veterans in Rural America</span>\');
+      })
+     '))
+    )
+  )
+)  # END UI
+
+# ____________________________________________________________________________________
+
+server <- function(input, output, session) {
+  
+  # UI Reactives
+  chosen_state <- reactive({    # State input
+    input$select_state
+  })
+  chosen_state2 <- reactive({    # State input
+    input$select_state2
+  })
+  chosen_table <- reactive({    # Table input
+    which(table_choices == input$select_table)
+  })
+  chosen_variable <- reactive({    # Variable input
+    input$select_variable
+  })
+  bool_count_var <- reactive({    # If variable is a Raw Total var
+    str_detect(input$select_variable, "Raw Total")
+  })
+  
+  max<- reactive({    # Slider max
+    input$range[2]
+  })
+  min<- reactive({    # Slider min
+    input$range[1] 
+  })
+  
+  chosen_category <- reactive({    # Variable input
+    input$select_category
+  })
+  
+  # Only show slider for percentage variables
+  observeEvent(chosen_variable(), {
+    updateSliderInput(session, inputId = "range", label="Range of Interest(%):",min=0,max=100,step = 0.1,
+                      value=max_min_var(chosen_variable()))
+    shinyjs::show("range")
+    if(str_detect(chosen_variable(), "Raw Total"))
+      hide("range")
+  })
+  
+  
+  # ____________________________________________________________________________________
+  # Texts
+  output$info <- renderText({
+    info
+  })
+  output$table_title <- renderText({
+    paste("<h4><center><b><font color=\"purple\">",
+          input$select_table,
+          " Table For ",
+          chosen_state()
+    )
+  })
+  output$rural_title <- renderText({
+    paste("<h4><center><b><font color=\"#052360\">", "RURAL Map For", chosen_variable())
+  })
+  output$urban_title <- renderText({
+    paste("<br><h4><center><b><font color=\"#c17414\">", "URBAN Map For", chosen_variable())
+  })
+  output$rural_title2 <- renderText({
+    paste("<h4><center><b><font color=\"#052360\">", "RURAL Pie Chart For", chosen_category(), "In", chosen_state2())
+  })
+  output$urban_title2 <- renderText({
+    paste("<h4><center><b><font color=\"#c17414\">", "URBAN Pie Chart For", chosen_category(), "In", chosen_state2())
+  })
+  
+  # ____________________________________________________________________________________
+  # Data tables
+  output$raw_table <- renderDataTable({
+    points <- transpose(chosen_state(), tables[[chosen_table()]][[1]])
+    margins <- transpose(chosen_state(), tables[[chosen_table()]][[2]])
+    
+    col_num <- ncol(points)
+    
+    sketch <- htmltools::withTags(table(
+      class = 'display',
+      thead(
+        tr(
+          th(class = 'dt-center h4', rowspan = 2, 'Variable'),
+          th(class = 'dt-center h5', colspan = col_num, 'Estimate/Percentage'),
+          th(class = 'dt-center h5', colspan = col_num, 'Margin of error')
+        ),
+        tr(
+          lapply(rep(colnames(points), 2), th)
+        )
+      )
+    ))
+    
+    datatable(cbind(points, margins), container = sketch,
+              options = list(pageLength = -1, dom = 't' , initComplete = JS(
+                "function(settings, json) {",
+                "$(this.api().table().column( 0 ).header()).css('border-right','3px solid #000');",
+                paste0("$(this.api().table().column(", col_num,").header()).css('border-right','3px solid #000');"),
+                "}"))) %>% 
+      formatStyle(c(0,col_num), `border-right` = "solid 3px")
+  })
+  
+  # ____________________________________________________________________________________
+  # Maps
+  output$rural_map <- renderLeaflet({
+    mapping("Rural", bool_count_var(), min(), max(),chosen_variable())
+    
+  })
+  
+  output$urban_map <- renderLeaflet({
+    mapping("Urban", bool_count_var(), min(), max(),chosen_variable())
+  })
+  
+  # ____________________________________________________________________________________
+  # Pies
+  observeEvent(c(chosen_category(), chosen_state2()), {
+    renderPieChart(div_id = "rural_pie",
+                   data = map_df %>% 
+                     filter(State == chosen_state2() & Residence == "Rural") %>% 
+                     select(pie_categories[[chosen_category()]])%>% 
+                     pivot_longer(everything()))
+    renderPieChart(div_id = "urban_pie",
+                   data = map_df %>% 
+                     filter(State == chosen_state2() & Residence == "Urban") %>% 
+                     select(pie_categories[[chosen_category()]])%>% 
+                     pivot_longer(everything()))
+    
+  })
+  
+} # END SERVER
+
+
+shinyApp(ui = ui, server = server)

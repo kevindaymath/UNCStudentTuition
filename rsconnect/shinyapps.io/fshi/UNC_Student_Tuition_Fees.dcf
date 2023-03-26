@@ -1,0 +1,14 @@
+name: UNC_Student_Tuition_Fees
+title: UNC_Student_Tuition_Fees
+username:
+account: fshi
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 8675015
+bundleId: 7008632
+url: https://fshi.shinyapps.io/UNC_Student_Tuition_Fees/
+when: 1679803096.98549
+lastSyncTime: 1679803096.9855
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: Test.R
